@@ -42,9 +42,14 @@ Veja `ARCHITECTURE.md` para o detalhamento de cada camada.
 3. Não crie abstrações para casos de uso que ainda não existem (YAGNI). Exemplo:
    não construa um sistema de plugins genérico enquanto não tivermos nem um painel
    funcionando (isso é M6, não M0).
-4. Se uma instrução do usuário conflitar com o `ARCHITECTURE.md`, pare e avise —
+4. **Não crie pastas vazias antecipando estrutura futura.** A pasta `src/devices/`
+   só existe quando o primeiro arquivo de `DeviceManager` for criado — não antes,
+   "pra já deixar pronto". `ARCHITECTURE.md` descreve o destino final da estrutura,
+   não uma lista de pastas para criar hoje. Isso vale pra qualquer camada
+   (`core/`, `protocol/`, `sessions/`, `connections/`, `features/*`).
+5. Se uma instrução do usuário conflitar com o `ARCHITECTURE.md`, pare e avise —
    não silenciosamente ignore a arquitetura nem o pedido.
-5. Ao terminar uma etapa, não avance sozinho para a próxima sem confirmação.
+6. Ao terminar uma etapa, não avance sozinho para a próxima sem confirmação.
 
 ## Proibições explícitas (MVP)
 

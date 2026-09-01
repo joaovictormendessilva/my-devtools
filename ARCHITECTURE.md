@@ -70,11 +70,13 @@ my-devtools/
 ```
 
 `core/`, `protocol/`, `devices/`, `sessions/` e `connections/` **não fazem parte
-do scaffold padrão** — são as pastas que criamos por cima dele para acomodar a
-arquitetura Device → DeviceSession → Connections → Capabilities → Panels. Elas
-vivem dentro de `src/`, ao lado de `main/`, `preload/` e `renderer/`, e são
-importadas pelo `main/` (nunca diretamente pelo `renderer/` — a ponte é sempre
-via `preload/` + IPC).
+do scaffold padrão** e **não devem ser criadas antecipadamente**. Este diagrama é
+o destino final da estrutura, não uma checklist de pastas para criar hoje. Cada
+uma nasce apenas quando o primeiro arquivo real que a justifica for escrito (ex:
+`src/devices/DeviceManager.ts` só existe quando começarmos o M1 — ver
+`CLAUDE.md`, regra de escopo #4). Quando existirem, vivem dentro de `src/`, ao
+lado de `main/`, `preload/` e `renderer/`, e são importadas pelo `main/` (nunca
+diretamente pelo `renderer/` — a ponte é sempre via `preload/` + IPC).
 
 Dentro de `renderer/src/features/`, cada painel segue o padrão feature-based
 (adaptado do projeto React Native de referência):
@@ -94,16 +96,16 @@ O mesmo padrão se repete para `network/`, `react/`, `storage/`, `navigation/`,
 
 ## 3. Responsabilidade de cada camada
 
-| Camada | Responsabilidade | NÃO faz |
-|---|---|---|
-| `main/` | Janela, lifecycle, tema, importa `core/` para orquestrar sessões | Lógica de negócio, parsing de protocolo |
-| `preload/` | Expõe via `contextBridge` só o necessário do `main/` para o `renderer/` | Qualquer lógica — é só uma ponte |
-| `core/` | Orquestra `DeviceManager` + `SessionManager` | UI, transporte bruto |
-| `devices/` | Descobre e modela `Device` (iOS Sim, Android Emu, físicos) | Conexão real ao runtime |
-| `sessions/` | Cria/mantém `DeviceSession`, isola stores por dispositivo | Renderização |
-| `connections/` | Implementa `Connection` (connect/send/onMessage) por transporte | Interpretar semântica do domínio (ex: "isso é um erro React") |
-| `protocol/` | Define shape das mensagens (`{version, type, sessionId, payload}`) e tipos centrais | Lógica de UI ou de conexão |
-| `renderer/features/*` | UI + hooks de orquestração de cada painel | Lógica de conexão, parsing de protocolo bruto |
+| Camada                | Responsabilidade                                                                    | NÃO faz                                                       |
+| --------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `main/`               | Janela, lifecycle, tema, importa `core/` para orquestrar sessões                    | Lógica de negócio, parsing de protocolo                       |
+| `preload/`            | Expõe via `contextBridge` só o necessário do `main/` para o `renderer/`             | Qualquer lógica — é só uma ponte                              |
+| `core/`               | Orquestra `DeviceManager` + `SessionManager`                                        | UI, transporte bruto                                          |
+| `devices/`            | Descobre e modela `Device` (iOS Sim, Android Emu, físicos)                          | Conexão real ao runtime                                       |
+| `sessions/`           | Cria/mantém `DeviceSession`, isola stores por dispositivo                           | Renderização                                                  |
+| `connections/`        | Implementa `Connection` (connect/send/onMessage) por transporte                     | Interpretar semântica do domínio (ex: "isso é um erro React") |
+| `protocol/`           | Define shape das mensagens (`{version, type, sessionId, payload}`) e tipos centrais | Lógica de UI ou de conexão                                    |
+| `renderer/features/*` | UI + hooks de orquestração de cada painel                                           | Lógica de conexão, parsing de protocolo bruto                 |
 
 ## 4. Fluxo de um evento (exemplo: `console.message`)
 
@@ -129,41 +131,41 @@ Definidas em `src/protocol/`:
 
 ```ts
 interface Device {
-  id: string;
-  name: string;
-  platform: 'ios' | 'android';
-  model?: string;
-  osVersion?: string;
-  expoSdk?: string;
-  reactNativeVersion?: string;
-  runtime?: string;
-  status: 'connected' | 'available' | 'offline';
+  id: string
+  name: string
+  platform: 'ios' | 'android'
+  model?: string
+  osVersion?: string
+  expoSdk?: string
+  reactNativeVersion?: string
+  runtime?: string
+  status: 'connected' | 'available' | 'offline'
 }
 
 interface DeviceSession {
-  id: string;
-  deviceId: string;
-  status: SessionStatus;
-  capabilities: Capability[];
+  id: string
+  deviceId: string
+  status: SessionStatus
+  capabilities: Capability[]
   connections: {
-    cdp?: Connection;
-    expo?: Connection;
-  };
+    cdp?: Connection
+    expo?: Connection
+  }
   stores: {
-    console: ConsoleStore;
-    network: NetworkStore;
-    navigation: NavigationStore;
-    storage: StorageStore;
-    performance: PerformanceStore;
-  };
+    console: ConsoleStore
+    network: NetworkStore
+    navigation: NavigationStore
+    storage: StorageStore
+    performance: PerformanceStore
+  }
 }
 
 interface Connection {
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  send(message: unknown): Promise<unknown>;
-  onMessage(handler: MessageHandler): Unsubscribe;
-  onClose(handler: CloseHandler): Unsubscribe;
+  connect(): Promise<void>
+  disconnect(): Promise<void>
+  send(message: unknown): Promise<unknown>
+  onMessage(handler: MessageHandler): Unsubscribe
+  onClose(handler: CloseHandler): Unsubscribe
 }
 ```
 
