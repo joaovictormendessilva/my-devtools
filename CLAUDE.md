@@ -50,6 +50,18 @@ Veja `ARCHITECTURE.md` para o detalhamento de cada camada.
 5. Se uma instrução do usuário conflitar com o `ARCHITECTURE.md`, pare e avise —
    não silenciosamente ignore a arquitetura nem o pedido.
 6. Ao terminar uma etapa, não avance sozinho para a próxima sem confirmação.
+7. **Nunca considere uma tarefa concluída sem rodar a verificação do projeto**
+   (type-check, lint e build — usar os scripts do `package.json`, ex: `pnpm typecheck`,
+   `pnpm lint`, `pnpm build`). Se algum desses falhar, corrija antes de reportar a
+   tarefa como pronta. Reporte no final o resultado dessa verificação.
+8. **Sem código morto.** Nada de funções não usadas, imports sobrando, variáveis
+   comentadas "pra depois", código de exemplo do template que não faz mais sentido.
+   Se algo do boilerplate gerado pelo scaffold não for usado, remova.
+9. **Nomes claros, sem enfeite.** Nome de função, variável e arquivo deve ser
+   entendível por qualquer pessoa lendo pela primeira vez, sem precisar saber
+   jargão de padrão de projeto ou termo "bonito". Prefira `findDeviceById` a
+   `resolveDeviceEntity`, prefira `connection.ts` a `connectionOrchestrator.ts`.
+   Se o nome parece que foi escolhido pra soar sofisticado, troque por algo mais direto.
 
 ## Proibições explícitas (MVP)
 
