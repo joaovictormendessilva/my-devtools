@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+/* O Tailwind v4 detecta os arquivos de origem a partir da pasta deste CSS.
+   Como tokens.css vive em shared/theme/, apontamos o scan para todo o renderer. */
+@source '../../';
+
+/* Valores crus (hex) dos tokens do DESIGN.md. Tema escuro é o padrão (:root);
+   o tema claro sobrescreve os mesmos nomes em [data-theme="light"]. Nenhum
+   componente usa hex direto — só as classes utilitárias geradas abaixo. */
+:root {
+  --background: #0d0d0f;
+  --surface: #161618;
+  --surface-elevated: #1f1f22;
+  --border: #2a2a2e;
+  --foreground: #e4e4e7;
+  --foreground-secondary: #a1a1aa;
+  --foreground-muted: #6b6b70;
+  --accent: #3b82f6;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+}
+
+[data-theme='light'] {
+  --background: #ffffff;
+  --surface: #f4f4f5;
+  --surface-elevated: #ffffff;
+  --border: #e4e4e7;
+  --foreground: #18181b;
+  --foreground-secondary: #52525b;
+  --foreground-muted: #a1a1aa;
+  --accent: #2563eb;
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --error: #dc2626;
+}
+
+/* @theme inline: gera as classes (bg-surface, text-foreground-muted, ...) a partir
+   das variáveis acima. "inline" faz o Tailwind referenciar var(--token) na classe,
+   então trocar data-theme troca o tema em runtime sem duplicar classe nenhuma. */
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+}

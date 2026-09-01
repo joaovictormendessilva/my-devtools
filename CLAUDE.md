@@ -62,6 +62,11 @@ Veja `ARCHITECTURE.md` para o detalhamento de cada camada.
    jargão de padrão de projeto ou termo "bonito". Prefira `findDeviceById` a
    `resolveDeviceEntity`, prefira `connection.ts` a `connectionOrchestrator.ts`.
    Se o nome parece que foi escolhido pra soar sofisticado, troque por algo mais direto.
+10. **Design system é lei.** Toda cor, espaçamento, fonte ou raio de borda usado em
+    componentes vem de `DESIGN.md` (via classes Tailwind mapeadas nos tokens).
+    Nunca usar cor arbitrária (`bg-[#...]`), `style` inline com valores de cor,
+    ou espaçamento fora da escala. Se faltar um token, pare e peça pra adicionar
+    em `DESIGN.md` primeiro — não invente um valor ad-hoc no componente.
 
 ## Proibições explícitas (MVP)
 
@@ -118,4 +123,5 @@ scaffold existente, nunca substituindo-o do zero.
 ## Documentos relacionados
 
 - `ARCHITECTURE.md` — detalhamento técnico de cada camada e estrutura de pastas
+- `DESIGN.md` — tokens de cor, espaçamento, tipografia e regras de UI (Tailwind)
 - `ROADMAP.md` — milestones M0–M8, o que é MVP e o que é pós-1.0

@@ -1,19 +1,28 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1280,
+    height: 800,
+    minWidth: 940,
+    minHeight: 640,
     show: false,
+    title: 'My DevTools',
     autoHideMenuBar: true,
+    // Cor de fundo enquanto o renderer carrega, evita flash. O processo main não
+    // lê CSS vars — este literal segue o token `background` do DESIGN.md.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0d0d0f' : '#ffffff',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      // Postura de segurança do IPC: renderer sem acesso a Node, e a única ponte
+      // com o processo main é o preload via contextBridge.
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
@@ -40,7 +49,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.mydevtools.app')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -48,9 +57,6 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
-
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
 
@@ -69,6 +75,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
