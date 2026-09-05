@@ -2,14 +2,20 @@ import { app, shell, BrowserWindow, nativeTheme, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { DeviceManager } from '../devices/deviceManager'
-import { SessionManager } from '../sessions/sessionManager'
+import { createAppCore } from '../core/appCore'
 
-const deviceManager = new DeviceManager()
-const sessionManager = new SessionManager(deviceManager)
+const { deviceManager, sessionManager } = createAppCore()
+
+// Referência à janela única do app, usada só para empurrar eventos de console
+// assim que chegam (o preload nunca fala com o SessionManager diretamente).
+let mainWindow: BrowserWindow | undefined
+
+sessionManager.onConsoleEntry((deviceId, entry) => {
+  mainWindow?.webContents.send('console:message', deviceId, entry)
+})
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  const browserWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 940,
@@ -30,12 +36,13 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+  mainWindow = browserWindow
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  browserWindow.on('ready-to-show', () => {
+    browserWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  browserWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
@@ -43,9 +50,9 @@ function createWindow(): void {
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    browserWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    browserWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
@@ -70,6 +77,11 @@ app.whenReady().then(() => {
   // device e ver `4` na UI). Nunca lança para o renderer — sempre um EvaluateResult.
   ipcMain.handle('devices:evaluate', (_event, deviceId: string, expression: string) =>
     sessionManager.evaluate(deviceId, expression)
+  )
+  // Painel Console: garante a conexão CDP do device e devolve o que já foi
+  // capturado. Eventos novos chegam depois via `console:message` (ver acima).
+  ipcMain.handle('devices:consoleEntries', (_event, deviceId: string) =>
+    sessionManager.consoleEntries(deviceId)
   )
   deviceManager.start()
 

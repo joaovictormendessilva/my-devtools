@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { Device } from '../protocol/device'
 import type { EvaluateResult } from '../protocol/evaluate'
+import type { ConsoleEntry } from '../protocol/console'
 
 // O preload é a ÚNICA ponte entre o processo main e o renderer. O renderer roda
 // sem acesso a Node (contextIsolation ligado, nodeIntegration desligado — ver
@@ -13,7 +14,18 @@ const api = {
   listDevices: (): Promise<Device[]> => ipcRenderer.invoke('devices:list'),
   // Temporário do M1: roda uma expressão via CDP no device e devolve o resultado.
   evaluate: (deviceId: string, expression: string): Promise<EvaluateResult> =>
-    ipcRenderer.invoke('devices:evaluate', deviceId, expression)
+    ipcRenderer.invoke('devices:evaluate', deviceId, expression),
+  getConsoleEntries: (deviceId: string): Promise<ConsoleEntry[]> =>
+    ipcRenderer.invoke('devices:consoleEntries', deviceId),
+  onConsoleMessage: (callback: (deviceId: string, entry: ConsoleEntry) => void): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      deviceId: string,
+      entry: ConsoleEntry
+    ): void => callback(deviceId, entry)
+    ipcRenderer.on('console:message', listener)
+    return () => ipcRenderer.removeListener('console:message', listener)
+  }
 }
 
 if (process.contextIsolated) {

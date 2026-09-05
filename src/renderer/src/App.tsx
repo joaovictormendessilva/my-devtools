@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useDevices } from './shared/useDevices'
 import { useEvaluate, type EvaluateState } from './shared/useEvaluate'
+import { ConsolePanel } from './features/console/components/ConsolePanel'
 
 // UI temporária de verificação do M1: cada device ganha um botão "Run 2+2" que
-// roda `2 + 2` via CDP naquele device e mostra o retorno. Prova o transporte
-// ponta-a-ponta e o isolamento por device. Sai quando o painel Console (M2) entrar.
+// roda `2 + 2` via CDP naquele device e mostra o retorno. Sai quando o REPL
+// (próxima fatia do M2) substituir esse botão por um input de comando de verdade.
 function EvaluateOutput({ state }: { state: EvaluateState | undefined }): React.JSX.Element | null {
   if (!state || state.status === 'idle') return null
   if (state.status === 'loading') {
@@ -22,6 +24,7 @@ function EvaluateOutput({ state }: { state: EvaluateState | undefined }): React.
 function App(): React.JSX.Element {
   const devices = useDevices()
   const { states, run } = useEvaluate()
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>()
 
   return (
     <div className="flex h-screen bg-background text-foreground">
@@ -32,14 +35,26 @@ function App(): React.JSX.Element {
           <ul className="flex flex-col">
             {devices.map((device) => {
               const state = states[device.id]
+              const isSelected = device.id === selectedDeviceId
               return (
-                <li key={device.id} className="border-b border-border px-4 py-3">
-                  <p className="truncate text-sm text-foreground">{device.name}</p>
-                  <p className="truncate font-mono text-xs text-foreground-muted">{device.id}</p>
-                  <div className="mt-2 flex items-center gap-2">
+                <li key={device.id} className="border-b border-border">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDeviceId(device.id)}
+                    className={`w-full border-l-2 px-4 py-3 text-left transition-colors hover:bg-surface-elevated ${
+                      isSelected ? 'border-accent bg-surface-elevated' : 'border-transparent'
+                    }`}
+                  >
+                    <p className="truncate text-sm text-foreground">{device.name}</p>
+                    <p className="truncate font-mono text-xs text-foreground-muted">{device.id}</p>
+                  </button>
+                  <div className="flex items-center gap-2 px-4 pb-3">
                     <button
                       type="button"
-                      onClick={() => void run(device.id, '2 + 2')}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void run(device.id, '2 + 2')
+                      }}
                       disabled={state?.status === 'loading'}
                       className="rounded-sm bg-surface-elevated px-2 py-1 text-xs text-foreground disabled:opacity-50"
                     >
@@ -53,7 +68,9 @@ function App(): React.JSX.Element {
           </ul>
         )}
       </aside>
-      <main className="flex-1" />
+      <main className="flex-1 overflow-hidden">
+        <ConsolePanel key={selectedDeviceId} deviceId={selectedDeviceId} />
+      </main>
     </div>
   )
 }
