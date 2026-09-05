@@ -1,7 +1,10 @@
-import { app, shell, BrowserWindow, nativeTheme } from 'electron'
+import { app, shell, BrowserWindow, nativeTheme, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { DeviceManager } from '../devices/deviceManager'
+
+const deviceManager = new DeviceManager()
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -58,6 +61,11 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Descoberta de dispositivos: o renderer pede a lista via preload (window.api),
+  // o DeviceManager faz o polling real do Metro em segundo plano.
+  ipcMain.handle('devices:list', () => deviceManager.list())
+  deviceManager.start()
+
   createWindow()
 
   app.on('activate', function () {
@@ -74,4 +82,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('will-quit', () => {
+  deviceManager.stop()
 })
