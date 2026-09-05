@@ -7,13 +7,13 @@ explícita do usuário (ver `CLAUDE.md`, regras de escopo).
 
 ## Status atual
 
-**Estamos em M1.** M0 concluído.
+**M1 concluído.** Próximo: M2.
 
 | Milestone           | Status          |
 | ------------------- | --------------- |
 | M0 — Fundação       | ✅ Concluído    |
-| M1 — Connectivity   | 🔜 Próximo      |
-| M2 — Core Debugging | ⬜ Não iniciado |
+| M1 — Connectivity   | ✅ Concluído    |
+| M2 — Core Debugging | 🔜 Próximo      |
 | M3 — Network        | ⬜ Não iniciado |
 | M4 — App Inspection | ⬜ Não iniciado |
 | M5 — Performance    | ⬜ Não iniciado |
@@ -41,7 +41,7 @@ corretos, tema muda com o SO, `pnpm typecheck` / `pnpm lint` / `pnpm build` sem 
 
 ---
 
-## M1 — Connectivity 🔜
+## M1 — Connectivity ✅
 
 **Objetivo:** o app consegue descobrir dispositivos reais e estabelecer uma
 `DeviceSession` isolada para cada um, com conexão de verdade ao runtime.
@@ -51,15 +51,45 @@ corretos, tema muda com o SO, `pnpm typecheck` / `pnpm lint` / `pnpm build` sem 
 - `DeviceManager`: descoberta de dispositivos via polling do endpoint `/json/list`
   do servidor Metro/Expo (funciona igual para físico, emulador e simulador —
   quem se registra é o app, não o SO)
-- Modelo `Device` e `DeviceSession` (ver `ARCHITECTURE.md`)
+- Modelo `Device` e `DeviceSession` (ver `ARCHITECTURE.md`) — a `DeviceSession`
+  implementada é a versão **fina** do shape do `ARCHITECTURE.md`: só
+  `{id, deviceId, connections}`, sem `status`/`capabilities`/`stores` ainda.
+  Esses campos existem no diagrama de arquitetura, mas nenhum código os lê hoje
+  (nenhum painel existe pra consultar `capabilities`, nenhum evento assíncrono
+  precisa de `status`) — YAGNI (`CLAUDE.md` regra 3). Entram quando o primeiro
+  consumidor real de cada campo existir (painéis a partir do M2).
+- `SessionManager` (`src/sessions/sessionManager.ts`): cria/mantém a
+  `DeviceSession` por device, mantém a conexão CDP viva entre chamadas e faz o
+  retry de reconexão. Substitui o `Map` solto de conexões que existia dentro do
+  `main/index.ts` antes disso ser formalizado.
 - `Connection` (interface) + `CDPConnection` (Hermes/CDP)
-- Definição do `Protocol` interno (shape de mensagens, `sessionId`)
-- Expo Plugin básico expondo o protocolo do lado do app RN
 - Sidebar lista dispositivos reais encontrados (não mockados)
+
+**Adiado conscientemente para o M2** (não é esquecimento — é YAGNI, ver
+`CLAUDE.md` regra 3): nenhum dos dois itens abaixo tem consumidor real hoje.
+Construí-los agora seria abstração vazia (`stores`/rotas para eventos que ainda
+não existem):
+
+- Definição do `Protocol` interno genérico (`{version, type, sessionId, payload}`)
+  — existe hoje só pra rotear eventos assíncronos não solicitados (ex:
+  `console.message` chegando sozinho). `Runtime.evaluate` é request/response
+  simples, já resolvido por IPC direto com `deviceId` — não precisa desse
+  envelope. Nasce junto com o painel Console (M2), primeiro consumidor real.
+- Expo Plugin básico expondo o protocolo do lado do app RN — hoje conectamos
+  direto no CDP/Hermes cru exposto pelo Metro; nenhuma funcionalidade atual
+  depende de um canal adicional do lado do app. Entra quando um painel
+  precisar de algo que o CDP não expõe.
 
 **Critério de pronto:** rodar `Runtime.evaluate` de `2 + 2` no dispositivo conectado
 e ver `4` retornar até a UI. Dois dispositivos conectados simultaneamente mostram
-sessões distintas na sidebar.
+sessões distintas na sidebar. ✅
+
+**Limitação conhecida:** a conexão CDP (`CDPConnection`) só funciona validada em
+projetos **Expo SDK 55 ou anterior**. Em SDK 56 e 57 (latest, no momento em que isso
+foi escrito) o `Runtime.evaluate` não retorna — causa raiz ainda não diagnosticada.
+Os apps de teste ficam em `examples/sdk-55` e `examples/sdk-56` para reproduzir. Até
+isso ser investigado, tratar SDK 55- como o alvo suportado desta feature; a matriz de
+compatibilidade formal por versão de SDK é trabalho do M7, não deste milestone.
 
 ---
 

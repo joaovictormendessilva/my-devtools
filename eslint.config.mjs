@@ -6,7 +6,9 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  // `examples/` são apps Expo standalone (próprio package.json e toolchain de
+  // debug/build), não seguem as convenções TS estritas do app principal.
+  { ignores: ['**/node_modules', '**/dist', '**/out', 'examples/**'] },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],

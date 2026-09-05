@@ -5,7 +5,9 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/protocol/**/*",
-    "src/devices/**/*"
+    "src/devices/**/*",
+    "src/connections/**/*",
+    "src/sessions/**/*"
   ],
   "compilerOptions": {
     "composite": true,

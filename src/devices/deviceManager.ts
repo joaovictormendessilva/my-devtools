@@ -13,6 +13,13 @@ const REQUEST_TIMEOUT_MS = 1500
 interface MetroListEntry {
   title?: string
   deviceName?: string
+  // URL do WebSocket CDP desta página de debug. É por AQUI que a CDPConnection
+  // conecta ao Hermes. Um mesmo device pode expor mais de uma página.
+  webSocketDebuggerUrl?: string
+  // A página anuncia `reactNative.capabilities`? É o sinal de que é uma página
+  // de inspector real (e não uma entrada degenerada/legada). Usado para
+  // escolher a página certa quando o device expõe mais de uma.
+  hasCapabilities: boolean
   reactNative?: {
     logicalDeviceId?: string
   }
@@ -30,6 +37,9 @@ function parseEntries(payload: unknown): MetroListEntry[] {
     return {
       title: typeof entry.title === 'string' ? entry.title : undefined,
       deviceName: typeof entry.deviceName === 'string' ? entry.deviceName : undefined,
+      webSocketDebuggerUrl:
+        typeof entry.webSocketDebuggerUrl === 'string' ? entry.webSocketDebuggerUrl : undefined,
+      hasCapabilities: reactNative ? isRecord(reactNative.capabilities) : false,
       reactNative: {
         logicalDeviceId:
           reactNative && typeof reactNative.logicalDeviceId === 'string'
@@ -93,7 +103,7 @@ function toDevice(logicalDeviceId: string, entries: MetroListEntry[]): Device {
 // aparece como um `logicalDeviceId` a mais para o mesmo aparelho. Não tentamos
 // merge por nome aqui de propósito (mascararia o problema); a identidade real é
 // reconciliada quando a Connection/CDP conectar de verdade (próximo passo do M1).
-function groupByLogicalDeviceId(entries: MetroListEntry[]): Device[] {
+function groupEntriesByLogicalDeviceId(entries: MetroListEntry[]): Map<string, MetroListEntry[]> {
   const groups = new Map<string, MetroListEntry[]>()
 
   for (const entry of entries) {
@@ -104,12 +114,28 @@ function groupByLogicalDeviceId(entries: MetroListEntry[]): Device[] {
     else groups.set(id, [entry])
   }
 
-  return [...groups].map(([id, groupEntries]) => toDevice(id, groupEntries))
+  return groups
+}
+
+// Escolhe a página CDP de UM device (grupo já agrupado por logicalDeviceId).
+// Regra: dentre as entradas com `webSocketDebuggerUrl`, prefere as que anunciam
+// `capabilities` (página de inspector real); dentre elas, a última — o Metro
+// lista as páginas na ordem de conexão, então após um reload a mais recente é a
+// viva. Sem nenhuma página com URL, o device não é debugável agora.
+function pickDebuggerUrl(entries: MetroListEntry[]): string | undefined {
+  const withUrl = entries.filter((entry) => entry.webSocketDebuggerUrl)
+  if (withUrl.length === 0) return undefined
+  const withCapabilities = withUrl.filter((entry) => entry.hasCapabilities)
+  const candidates = withCapabilities.length > 0 ? withCapabilities : withUrl
+  return candidates[candidates.length - 1]?.webSocketDebuggerUrl
 }
 
 export class DeviceManager {
   private devices: Device[] = []
   private timer: ReturnType<typeof setInterval> | undefined
+  // deviceId (logicalDeviceId) → `webSocketDebuggerUrl` da página CDP a usar.
+  // Recriado a cada poll; consumido pelo main para abrir a CDPConnection.
+  private debuggerUrls = new Map<string, string>()
 
   start(): void {
     if (this.timer) return
@@ -127,6 +153,11 @@ export class DeviceManager {
     return this.devices
   }
 
+  /** URL do WebSocket CDP do device, ou `undefined` se ele não expõe uma página debugável. */
+  debuggerUrlFor(deviceId: string): string | undefined {
+    return this.debuggerUrls.get(deviceId)
+  }
+
   private async poll(): Promise<void> {
     try {
       const response = await fetch(METRO_JSON_LIST_URL, {
@@ -134,12 +165,21 @@ export class DeviceManager {
       })
       if (!response.ok) {
         this.devices = []
+        this.debuggerUrls.clear()
         return
       }
-      this.devices = groupByLogicalDeviceId(parseEntries(await response.json()))
+      const groups = groupEntriesByLogicalDeviceId(parseEntries(await response.json()))
+      this.devices = [...groups].map(([id, entries]) => toDevice(id, entries))
+      this.debuggerUrls = new Map(
+        [...groups].flatMap(([id, entries]) => {
+          const url = pickDebuggerUrl(entries)
+          return url ? [[id, url] as const] : []
+        })
+      )
     } catch {
       // Metro fora do ar / sem servidor Expo rodando: lista vazia, sem crashar o loop.
       this.devices = []
+      this.debuggerUrls.clear()
     }
   }
 }
