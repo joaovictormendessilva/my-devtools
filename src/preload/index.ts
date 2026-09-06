@@ -29,6 +29,8 @@ const api = {
   },
   getDebuggerState: (deviceId: string): Promise<DebuggerState> =>
     ipcRenderer.invoke('devices:debuggerState', deviceId),
+  getKnownScripts: (deviceId: string): Promise<string[]> =>
+    ipcRenderer.invoke('devices:knownScripts', deviceId),
   setBreakpoint: (
     deviceId: string,
     file: string,

@@ -5,13 +5,19 @@ import { useDebugger } from '../hooks/useDebugger'
 const STEP_BUTTON_CLASS =
   'text-foreground-muted hover:text-foreground disabled:opacity-40 disabled:hover:text-foreground-muted'
 
+const KNOWN_SCRIPTS_DATALIST_ID = 'debugger-known-scripts'
+
 // Sem visualizador de código-fonte ainda (não está no roadmap desta fatia) —
 // o breakpoint é setado indicando arquivo + linha manualmente, olhando o
-// código no editor. `Debugger.setBreakpointByUrl` aceita mesmo sem confirmar
-// que a linha existe; só nunca vai ser atingido se estiver errado.
+// código no editor. O `<datalist>` sugere os scripts que o CDP já viu (ver
+// `knownScripts` no hook) — é a única forma de saber o que digitar sem um
+// visualizador; `Debugger.setBreakpointByUrl` aceita mesmo sem confirmar que a
+// linha existe, só nunca vai ser atingido se estiver errado.
 function BreakpointForm({
+  knownScripts,
   onSubmit
 }: {
+  knownScripts: string[]
   onSubmit: (file: string, lineNumber: number) => void
 }): React.JSX.Element {
   const [file, setFile] = useState('')
@@ -33,11 +39,17 @@ function BreakpointForm({
     >
       <input
         type="text"
+        list={KNOWN_SCRIPTS_DATALIST_ID}
         value={file}
         onChange={(event) => setFile(event.target.value)}
         placeholder="arquivo (ex: App.js)"
         className="min-w-0 flex-1 rounded-sm bg-surface-elevated px-2 py-1 font-mono text-xs text-foreground outline-none placeholder:text-foreground-muted"
       />
+      <datalist id={KNOWN_SCRIPTS_DATALIST_ID}>
+        {knownScripts.map((url) => (
+          <option key={url} value={url} />
+        ))}
+      </datalist>
       <input
         type="number"
         value={line}
@@ -53,8 +65,17 @@ function BreakpointForm({
 }
 
 export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): React.JSX.Element {
-  const { state, notice, setBreakpoint, removeBreakpoint, resume, stepOver, stepInto, stepOut } =
-    useDebugger(deviceId)
+  const {
+    state,
+    notice,
+    knownScripts,
+    setBreakpoint,
+    removeBreakpoint,
+    resume,
+    stepOver,
+    stepInto,
+    stepOut
+  } = useDebugger(deviceId)
 
   if (!deviceId) {
     return (
@@ -115,7 +136,7 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
         </div>
       </div>
 
-      <BreakpointForm onSubmit={setBreakpoint} />
+      <BreakpointForm knownScripts={knownScripts} onSubmit={setBreakpoint} />
 
       {notice && (
         <p className="shrink-0 border-b border-border px-4 py-2 text-xs text-warning">{notice}</p>
@@ -162,6 +183,21 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
                   className={`font-mono text-xs ${index === 0 ? 'text-foreground' : 'text-foreground-muted'}`}
                 >
                   {frame.functionName} ({frame.file}:{frame.lineNumber}:{frame.columnNumber})
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="border-b border-border px-4 py-2">
+          <h3 className="mb-1 text-xs font-medium text-foreground-secondary">Scripts carregados</h3>
+          {knownScripts.length === 0 ? (
+            <p className="text-xs text-foreground-muted">Nenhum ainda</p>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {knownScripts.map((url) => (
+                <li key={url} className="truncate font-mono text-xs text-foreground-muted">
+                  {url}
                 </li>
               ))}
             </ul>

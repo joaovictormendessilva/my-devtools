@@ -141,6 +141,16 @@ export class SessionManager {
     return session?.stores.debugger ?? IDLE_DEBUGGER_STATE
   }
 
+  /**
+   * URLs de todos os scripts que o CDP já mandou via `Debugger.scriptParsed`
+   * nesta sessão — é a lista real do que dá pra usar em `setBreakpoint` (sem
+   * visualizador de código, é a única forma de saber o que digitar).
+   */
+  async knownScripts(deviceId: string): Promise<string[]> {
+    await this.ensureConnectionWithRetry(deviceId)
+    return [...this.getScriptUrls(deviceId).values()]
+  }
+
   async setBreakpoint(
     deviceId: string,
     file: string,

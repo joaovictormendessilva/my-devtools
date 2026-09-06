@@ -93,6 +93,11 @@ app.whenReady().then(() => {
   ipcMain.handle('devices:debuggerState', (_event, deviceId: string) =>
     sessionManager.debuggerState(deviceId)
   )
+  // Sem visualizador de código, é a única forma de saber o que digitar num
+  // breakpoint — lista os scripts que o CDP já viu (`Debugger.scriptParsed`).
+  ipcMain.handle('devices:knownScripts', (_event, deviceId: string) =>
+    sessionManager.knownScripts(deviceId)
+  )
   ipcMain.handle(
     'devices:setBreakpoint',
     (_event, deviceId: string, file: string, lineNumber: number) =>
