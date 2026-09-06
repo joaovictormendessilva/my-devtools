@@ -5,7 +5,9 @@ const IDLE_STATE: DebuggerState = { status: 'idle', frames: [], scopes: [], brea
 
 export interface UseDebugger {
   state: DebuggerState
-  error: string | undefined
+  /** Erro de um comando, ou aviso de sucesso "estranho" (ex: breakpoint sem
+   *  script correspondente carregado ainda) — ver `DebuggerCommandResult`. */
+  notice: string | undefined
   setBreakpoint: (file: string, lineNumber: number) => Promise<void>
   removeBreakpoint: (breakpointId: string) => Promise<void>
   resume: () => Promise<void>
@@ -16,7 +18,7 @@ export interface UseDebugger {
 
 export function useDebugger(deviceId: string | undefined): UseDebugger {
   const [state, setState] = useState<DebuggerState>(IDLE_STATE)
-  const [error, setError] = useState<string | undefined>()
+  const [notice, setNotice] = useState<string | undefined>()
 
   useEffect(() => {
     if (!deviceId) return
@@ -42,14 +44,14 @@ export function useDebugger(deviceId: string | undefined): UseDebugger {
     async (command: (id: string) => Promise<DebuggerCommandResult>): Promise<void> => {
       if (!deviceId) return
       const result = await command(deviceId)
-      setError(result.ok ? undefined : result.message)
+      setNotice(result.ok ? result.warning : result.message)
     },
     [deviceId]
   )
 
   return {
     state,
-    error,
+    notice,
     setBreakpoint: (file, lineNumber) =>
       run((id) => window.api.setBreakpoint(id, file, lineNumber)),
     removeBreakpoint: (breakpointId) => run((id) => window.api.removeBreakpoint(id, breakpointId)),

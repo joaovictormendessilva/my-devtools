@@ -68,6 +68,20 @@ function readEvaluateValue(
   return { ok: true, value: remoteObject ? remoteObject.value : undefined }
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// O Metro serve o bundle com uma URL própria (host, porta, query string de
+// plataforma) que o usuário não digita — ele só sabe o nome/caminho do
+// arquivo (ex: "App.js"). `Debugger.setBreakpointByUrl` com `url` exige
+// igualdade EXATA com a URL do script carregado; usamos `urlRegex` casando só
+// o final do caminho (com query string opcional depois) pra não depender de
+// saber a URL completa.
+function urlRegexForFile(file: string): string {
+  return `${escapeRegExp(file)}(\\?.*)?$`
+}
+
 function extractScopeVariables(response: unknown): ScopeVariable[] {
   if (!isRecord(response) || !Array.isArray(response.result)) return []
   return response.result
@@ -152,7 +166,7 @@ export class SessionManager {
     try {
       const response = await ensured.connection.send({
         method: 'Debugger.setBreakpointByUrl',
-        params: { url: file, lineNumber: Math.max(0, lineNumber - 1) }
+        params: { urlRegex: urlRegexForFile(file), lineNumber: Math.max(0, lineNumber - 1) }
       })
       const breakpointId =
         isRecord(response) && typeof response.breakpointId === 'string'
@@ -165,6 +179,16 @@ export class SessionManager {
         ...state,
         breakpoints: [...state.breakpoints, breakpoint]
       }))
+
+      const locations =
+        isRecord(response) && Array.isArray(response.locations) ? response.locations : []
+      if (locations.length === 0) {
+        return {
+          ok: true,
+          warning:
+            'nenhum script carregado bate com esse arquivo ainda — o breakpoint pode nunca ser atingido'
+        }
+      }
       return { ok: true }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) }

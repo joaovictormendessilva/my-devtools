@@ -39,4 +39,7 @@ export interface DebuggerState {
   breakpoints: Breakpoint[]
 }
 
-export type DebuggerCommandResult = { ok: true } | { ok: false; message: string }
+export type DebuggerCommandResult =
+  /** `warning` sinaliza sucesso "estranho" (ex: breakpoint setado mas sem
+   *  nenhum script carregado bateu com a URL ainda) — não é um erro. */
+  { ok: true; warning?: string } | { ok: false; message: string }

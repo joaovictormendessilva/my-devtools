@@ -53,7 +53,7 @@ function BreakpointForm({
 }
 
 export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): React.JSX.Element {
-  const { state, error, setBreakpoint, removeBreakpoint, resume, stepOver, stepInto, stepOut } =
+  const { state, notice, setBreakpoint, removeBreakpoint, resume, stepOver, stepInto, stepOut } =
     useDebugger(deviceId)
 
   if (!deviceId) {
@@ -117,8 +117,8 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
 
       <BreakpointForm onSubmit={setBreakpoint} />
 
-      {error && (
-        <p className="shrink-0 border-b border-border px-4 py-2 text-xs text-error">{error}</p>
+      {notice && (
+        <p className="shrink-0 border-b border-border px-4 py-2 text-xs text-warning">{notice}</p>
       )}
 
       <div className="flex-1 overflow-y-auto">
