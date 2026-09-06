@@ -13,7 +13,7 @@ declare global {
       getConsoleEntries: (deviceId: string) => Promise<ConsoleEntry[]>
       onConsoleMessage: (callback: (deviceId: string, entry: ConsoleEntry) => void) => () => void
       getDebuggerState: (deviceId: string) => Promise<DebuggerState>
-      getKnownScripts: (deviceId: string) => Promise<string[]>
+      getKnownSourceFiles: (deviceId: string) => Promise<string[]>
       setBreakpoint: (
         deviceId: string,
         file: string,

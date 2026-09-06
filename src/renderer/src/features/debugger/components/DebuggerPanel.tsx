@@ -5,19 +5,49 @@ import { useDebugger } from '../hooks/useDebugger'
 const STEP_BUTTON_CLASS =
   'text-foreground-muted hover:text-foreground disabled:opacity-40 disabled:hover:text-foreground-muted'
 
-const KNOWN_SCRIPTS_DATALIST_ID = 'debugger-known-scripts'
+const KNOWN_SOURCE_FILES_DATALIST_ID = 'debugger-known-source-files'
+
+// Seção colapsável — controlado (não só `defaultOpen`) porque o painel
+// re-renderiza a cada `debugger:update` (todo step/pause/resume); com um
+// `open` não-controlado o React reaplicaria o valor inicial a cada render e
+// desfaria qualquer collapse manual do usuário.
+function Section({
+  title,
+  open,
+  onToggle,
+  children
+}: {
+  title: string
+  open: boolean
+  onToggle: (open: boolean) => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <details
+      className="border-b border-border px-4 py-2"
+      open={open}
+      onToggle={(event) => onToggle(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-xs font-medium text-foreground-secondary">
+        {title}
+      </summary>
+      <div className="mt-1">{children}</div>
+    </details>
+  )
+}
 
 // Sem visualizador de código-fonte ainda (não está no roadmap desta fatia) —
 // o breakpoint é setado indicando arquivo + linha manualmente, olhando o
-// código no editor. O `<datalist>` sugere os scripts que o CDP já viu (ver
-// `knownScripts` no hook) — é a única forma de saber o que digitar sem um
-// visualizador; `Debugger.setBreakpointByUrl` aceita mesmo sem confirmar que a
-// linha existe, só nunca vai ser atingido se estiver errado.
+// código no editor. O `<datalist>` sugere os arquivos-fonte do source map do
+// bundle (ver `knownSourceFiles` no hook) — é a única forma de saber o que
+// digitar sem um visualizador; a posição é traduzida pro bundle nos
+// bastidores (ver `sourcePosition.ts`), então nem sempre vai existir pra uma
+// linha sem código executável.
 function BreakpointForm({
-  knownScripts,
+  knownSourceFiles,
   onSubmit
 }: {
-  knownScripts: string[]
+  knownSourceFiles: string[]
   onSubmit: (file: string, lineNumber: number) => void
 }): React.JSX.Element {
   const [file, setFile] = useState('')
@@ -39,15 +69,15 @@ function BreakpointForm({
     >
       <input
         type="text"
-        list={KNOWN_SCRIPTS_DATALIST_ID}
+        list={KNOWN_SOURCE_FILES_DATALIST_ID}
         value={file}
         onChange={(event) => setFile(event.target.value)}
         placeholder="arquivo (ex: App.js)"
         className="min-w-0 flex-1 rounded-sm bg-surface-elevated px-2 py-1 font-mono text-xs text-foreground outline-none placeholder:text-foreground-muted"
       />
-      <datalist id={KNOWN_SCRIPTS_DATALIST_ID}>
-        {knownScripts.map((url) => (
-          <option key={url} value={url} />
+      <datalist id={KNOWN_SOURCE_FILES_DATALIST_ID}>
+        {knownSourceFiles.map((file) => (
+          <option key={file} value={file} />
         ))}
       </datalist>
       <input
@@ -68,7 +98,7 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
   const {
     state,
     notice,
-    knownScripts,
+    knownSourceFiles,
     setBreakpoint,
     removeBreakpoint,
     resume,
@@ -76,6 +106,12 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
     stepInto,
     stepOut
   } = useDebugger(deviceId)
+  const [openSections, setOpenSections] = useState({
+    breakpoints: true,
+    callStack: true,
+    knownFiles: false,
+    scopes: true
+  })
 
   if (!deviceId) {
     return (
@@ -88,6 +124,8 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
   }
 
   const isPaused = state.status === 'paused'
+  const toggleSection = (key: keyof typeof openSections, open: boolean): void =>
+    setOpenSections((prev) => ({ ...prev, [key]: open }))
 
   return (
     <div className="flex h-full flex-col">
@@ -136,15 +174,18 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
         </div>
       </div>
 
-      <BreakpointForm knownScripts={knownScripts} onSubmit={setBreakpoint} />
+      <BreakpointForm knownSourceFiles={knownSourceFiles} onSubmit={setBreakpoint} />
 
       {notice && (
         <p className="shrink-0 border-b border-border px-4 py-2 text-xs text-warning">{notice}</p>
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <div className="border-b border-border px-4 py-2">
-          <h3 className="mb-1 text-xs font-medium text-foreground-secondary">Breakpoints</h3>
+        <Section
+          title={`Breakpoints (${state.breakpoints.length})`}
+          open={openSections.breakpoints}
+          onToggle={(open) => toggleSection('breakpoints', open)}
+        >
           {state.breakpoints.length === 0 ? (
             <p className="text-xs text-foreground-muted">Nenhum breakpoint</p>
           ) : (
@@ -169,10 +210,13 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
               ))}
             </ul>
           )}
-        </div>
+        </Section>
 
-        <div className="border-b border-border px-4 py-2">
-          <h3 className="mb-1 text-xs font-medium text-foreground-secondary">Call stack</h3>
+        <Section
+          title="Call stack"
+          open={openSections.callStack}
+          onToggle={(open) => toggleSection('callStack', open)}
+        >
           {!isPaused ? (
             <p className="text-xs text-foreground-muted">Não pausado</p>
           ) : (
@@ -187,27 +231,31 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
               ))}
             </ul>
           )}
-        </div>
+        </Section>
 
-        <div className="border-b border-border px-4 py-2">
-          <h3 className="mb-1 text-xs font-medium text-foreground-secondary">Scripts carregados</h3>
-          {knownScripts.length === 0 ? (
+        <Section
+          title={`Arquivos conhecidos (${knownSourceFiles.length})`}
+          open={openSections.knownFiles}
+          onToggle={(open) => toggleSection('knownFiles', open)}
+        >
+          {knownSourceFiles.length === 0 ? (
             <p className="text-xs text-foreground-muted">Nenhum ainda</p>
           ) : (
             <ul className="flex flex-col gap-0.5">
-              {knownScripts.map((url) => (
-                <li key={url} className="truncate font-mono text-xs text-foreground-muted">
-                  {url}
+              {knownSourceFiles.map((file) => (
+                <li key={file} className="truncate font-mono text-xs text-foreground-muted">
+                  {file}
                 </li>
               ))}
             </ul>
           )}
-        </div>
+        </Section>
 
-        <div className="px-4 py-2">
-          <h3 className="mb-1 text-xs font-medium text-foreground-secondary">
-            Scopes (frame atual)
-          </h3>
+        <Section
+          title="Scopes (frame atual)"
+          open={openSections.scopes}
+          onToggle={(open) => toggleSection('scopes', open)}
+        >
           {!isPaused || state.scopes.length === 0 ? (
             <p className="text-xs text-foreground-muted">Nenhuma variável</p>
           ) : (
@@ -224,7 +272,7 @@ export function DebuggerPanel({ deviceId }: { deviceId: string | undefined }): R
               </div>
             ))
           )}
-        </div>
+        </Section>
       </div>
     </div>
   )

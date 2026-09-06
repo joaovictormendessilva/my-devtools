@@ -94,9 +94,9 @@ app.whenReady().then(() => {
     sessionManager.debuggerState(deviceId)
   )
   // Sem visualizador de código, é a única forma de saber o que digitar num
-  // breakpoint — lista os scripts que o CDP já viu (`Debugger.scriptParsed`).
-  ipcMain.handle('devices:knownScripts', (_event, deviceId: string) =>
-    sessionManager.knownScripts(deviceId)
+  // breakpoint — lista os arquivos-fonte do source map do bundle.
+  ipcMain.handle('devices:knownSourceFiles', (_event, deviceId: string) =>
+    sessionManager.knownSourceFiles(deviceId)
   )
   ipcMain.handle(
     'devices:setBreakpoint',

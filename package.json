@@ -24,6 +24,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "lucide-react": "^1.41.0",
+    "source-map-js": "^1.2.1",
     "ws": "^8.21.3"
   },
   "devDependencies": {

@@ -20,6 +20,7 @@ import {
 } from './debuggerEvents'
 import { formatRemoteObject, isRecord } from './remoteObject'
 import { symbolicateFrames, symbolicateStructured } from './symbolicate'
+import { findGeneratedPosition, listSourceFiles, type GeneratedPosition } from './sourcePosition'
 
 const CONNECT_RETRY_ATTEMPTS = 3
 const CONNECT_RETRY_DELAY_MS = 500
@@ -142,13 +143,18 @@ export class SessionManager {
   }
 
   /**
-   * URLs de todos os scripts que o CDP já mandou via `Debugger.scriptParsed`
-   * nesta sessão — é a lista real do que dá pra usar em `setBreakpoint` (sem
-   * visualizador de código, é a única forma de saber o que digitar).
+   * Arquivos-fonte originais (do source map do bundle) que dá pra usar em
+   * `setBreakpoint` — sem visualizador de código, é a única forma de saber o
+   * que digitar. `node_modules` fica de fora da sugestão (é gigante e quase
+   * nunca é o alvo) — mas ainda dá pra digitar um arquivo de lá na mão, isso
+   * só afeta a lista de sugestões, não o casamento de `setBreakpoint`.
    */
-  async knownScripts(deviceId: string): Promise<string[]> {
+  async knownSourceFiles(deviceId: string): Promise<string[]> {
     await this.ensureConnectionWithRetry(deviceId)
-    return [...this.getScriptUrls(deviceId).values()]
+    const bundleUrls = [...this.getScriptUrls(deviceId).values()]
+    const files = await Promise.all(bundleUrls.map((url) => listSourceFiles(url)))
+    const unique = [...new Set(files.flat())]
+    return unique.filter((file) => !file.includes('node_modules'))
   }
 
   async setBreakpoint(
@@ -159,18 +165,39 @@ export class SessionManager {
     const ensured = await this.ensureConnection(deviceId)
     if (!ensured.ok) return { ok: false, message: ensured.message }
 
-    // Hermes só implementa `Debugger.setBreakpointByUrl` com `url` EXATA — não
-    // suporta `urlRegex` ("URL required; regex unsupported"). Como o usuário só
-    // sabe o nome/caminho do arquivo (ex: "App.js"), não a URL completa que o
-    // Metro serve (host, porta, query string), resolvemos a URL real nós
-    // mesmos a partir dos `Debugger.scriptParsed` já vistos nesta conexão.
-    const resolved = this.resolveScriptUrl(deviceId, file)
-    if (!resolved.ok) return resolved
+    // O Metro serve o app inteiro como UM script (o bundle) — "App.js" nunca
+    // existe como URL própria (isso é o que `knownScripts`/o `<datalist>` do
+    // painel mostram na prática). A posição real do breakpoint só existe
+    // dentro do source map do bundle, então traduzimos arquivo+linha
+    // (posição original) pra linha+coluna do bundle (posição gerada) antes de
+    // pedir pro CDP.
+    const bundleUrls = [...this.getScriptUrls(deviceId).values()]
+    if (bundleUrls.length === 0) {
+      return { ok: false, message: 'nenhum script carregado ainda' }
+    }
+
+    let resolvedPosition: GeneratedPosition | undefined
+    let resolvedBundleUrl: string | undefined
+    let lastError = 'não consegui localizar esse arquivo/linha em nenhum bundle carregado'
+    for (const bundleUrl of bundleUrls) {
+      const found = await findGeneratedPosition(bundleUrl, file, lineNumber)
+      if (found.ok) {
+        resolvedPosition = found.position
+        resolvedBundleUrl = bundleUrl
+        break
+      }
+      lastError = found.message
+    }
+    if (!resolvedPosition || !resolvedBundleUrl) return { ok: false, message: lastError }
 
     try {
       const response = await ensured.connection.send({
         method: 'Debugger.setBreakpointByUrl',
-        params: { url: resolved.url, lineNumber: Math.max(0, lineNumber - 1) }
+        params: {
+          url: resolvedBundleUrl,
+          lineNumber: Math.max(0, resolvedPosition.line - 1),
+          columnNumber: resolvedPosition.column
+        }
       })
       const breakpointId =
         isRecord(response) && typeof response.breakpointId === 'string'
@@ -178,16 +205,16 @@ export class SessionManager {
           : undefined
       if (!breakpointId) return { ok: false, message: 'CDP não devolveu um breakpointId' }
 
-      const breakpoint: Breakpoint = { id: breakpointId, file: resolved.url, lineNumber }
+      const breakpoint: Breakpoint = { id: breakpointId, file, lineNumber }
       this.updateDebuggerState(ensured.session, (state) => ({
         ...state,
         breakpoints: [...state.breakpoints, breakpoint]
       }))
 
-      // URL certa não garante que ESSA linha tem código executável (linha em
-      // branco, comentário, chave de fechamento) — CDP resolve pro breakable
-      // mais próximo e devolve isso em `locations`; vazio é sinal real de
-      // problema, mesmo com a URL correta.
+      // Posição certa não garante que ESSA linha tem código executável (linha
+      // em branco, comentário, chave de fechamento) — CDP resolve pro
+      // breakable mais próximo e devolve isso em `locations`; vazio é sinal
+      // real de problema, mesmo com a posição correta.
       const locations =
         isRecord(response) && Array.isArray(response.locations) ? response.locations : []
       if (locations.length === 0) {
@@ -200,32 +227,6 @@ export class SessionManager {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) }
     }
-  }
-
-  // Acha, entre os scripts já carregados nesta sessão, o único cuja URL
-  // termina com `file`. Ambíguo (dois arquivos com o mesmo nome, ex: dois
-  // `index.js` de pastas diferentes) ou não encontrado (arquivo ainda não
-  // carregado) viram erro — não dá pra adivinhar qual o usuário quis dizer.
-  private resolveScriptUrl(
-    deviceId: string,
-    file: string
-  ): { ok: true; url: string } | { ok: false; message: string } {
-    const knownUrls = new Set(this.getScriptUrls(deviceId).values())
-    const matches = [...knownUrls].filter((url) => url.endsWith(file))
-
-    if (matches.length === 0) {
-      return {
-        ok: false,
-        message: `nenhum script carregado termina com "${file}" — confira o nome/caminho, ou abra a tela que carrega esse arquivo antes de setar o breakpoint`
-      }
-    }
-    if (matches.length > 1) {
-      return {
-        ok: false,
-        message: `mais de um script carregado termina com "${file}" (${matches.join(', ')}) — use um caminho mais específico, ex: "pasta/${file}"`
-      }
-    }
-    return { ok: true, url: matches[0] }
   }
 
   async removeBreakpoint(deviceId: string, breakpointId: string): Promise<DebuggerCommandResult> {

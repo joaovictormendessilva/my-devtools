@@ -6,11 +6,11 @@ const IDLE_STATE: DebuggerState = { status: 'idle', frames: [], scopes: [], brea
 export interface UseDebugger {
   state: DebuggerState
   /** Erro de um comando, ou aviso de sucesso "estranho" (ex: breakpoint sem
-   *  script correspondente carregado ainda) — ver `DebuggerCommandResult`. */
+   *  posição resolvida ainda) — ver `DebuggerCommandResult`. */
   notice: string | undefined
-  /** URLs dos scripts que o CDP já viu — sem visualizador de código, é a
+  /** Arquivos-fonte do source map do bundle — sem visualizador de código, é a
    *  referência de que arquivo/caminho digitar num breakpoint. */
-  knownScripts: string[]
+  knownSourceFiles: string[]
   setBreakpoint: (file: string, lineNumber: number) => Promise<void>
   removeBreakpoint: (breakpointId: string) => Promise<void>
   resume: () => Promise<void>
@@ -22,7 +22,7 @@ export interface UseDebugger {
 export function useDebugger(deviceId: string | undefined): UseDebugger {
   const [state, setState] = useState<DebuggerState>(IDLE_STATE)
   const [notice, setNotice] = useState<string | undefined>()
-  const [knownScripts, setKnownScripts] = useState<string[]>([])
+  const [knownSourceFiles, setKnownSourceFiles] = useState<string[]>([])
 
   useEffect(() => {
     if (!deviceId) return
@@ -32,8 +32,8 @@ export function useDebugger(deviceId: string | undefined): UseDebugger {
     void window.api.getDebuggerState(deviceId).then((initial) => {
       if (active) setState(initial)
     })
-    void window.api.getKnownScripts(deviceId).then((scripts) => {
-      if (active) setKnownScripts(scripts)
+    void window.api.getKnownSourceFiles(deviceId).then((files) => {
+      if (active) setKnownSourceFiles(files)
     })
 
     const unsubscribe = window.api.onDebuggerUpdate((entryDeviceId, update) => {
@@ -52,9 +52,10 @@ export function useDebugger(deviceId: string | undefined): UseDebugger {
       if (!deviceId) return
       const result = await command(deviceId)
       setNotice(result.ok ? result.warning : result.message)
-      // Um script novo pode ter carregado desde o mount (ex: navegou pra outra
-      // tela) — atualiza a lista de sugestões depois de qualquer comando.
-      void window.api.getKnownScripts(deviceId).then(setKnownScripts)
+      // Um arquivo novo pode ter aparecido no bundle desde o mount (ex:
+      // navegou pra outra tela) — atualiza a lista de sugestões depois de
+      // qualquer comando.
+      void window.api.getKnownSourceFiles(deviceId).then(setKnownSourceFiles)
     },
     [deviceId]
   )
@@ -62,7 +63,7 @@ export function useDebugger(deviceId: string | undefined): UseDebugger {
   return {
     state,
     notice,
-    knownScripts,
+    knownSourceFiles,
     setBreakpoint: (file, lineNumber) =>
       run((id) => window.api.setBreakpoint(id, file, lineNumber)),
     removeBreakpoint: (breakpointId) => run((id) => window.api.removeBreakpoint(id, breakpointId)),
