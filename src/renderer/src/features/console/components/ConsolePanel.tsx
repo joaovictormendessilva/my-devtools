@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronsDown, ChevronsUp, Copy, Trash2 } from 'lucide-react'
+import { Check, ChevronsDown, ChevronsUp, Copy, Search, Trash2 } from 'lucide-react'
 import type { ConsoleEntry, ConsoleLevel } from '../../../../../protocol/console'
 import { useConsole } from '../hooks/useConsole'
 import { useRepl, type ReplEntry } from '../hooks/useRepl'
@@ -105,6 +105,42 @@ const LEVEL_CLASS: Record<ConsoleLevel, string> = {
   debug: 'text-foreground-muted',
   warn: 'text-warning',
   error: 'text-error'
+}
+
+const ALL_LEVELS: ConsoleLevel[] = ['log', 'info', 'debug', 'warn', 'error']
+
+// Filtro por nível só afeta linhas de console — comandos do REPL não têm
+// `level` (não vêm do CDP), então ficam sempre visíveis quanto a esse filtro.
+function matchesFilters(
+  row: ScrollbackRow,
+  query: string,
+  activeLevels: Set<ConsoleLevel>
+): boolean {
+  if (row.kind === 'console' && !activeLevels.has(row.entry.level)) return false
+  if (!query) return true
+  return rowToText(row).toLowerCase().includes(query)
+}
+
+function LevelToggle({
+  level,
+  active,
+  onToggle
+}: {
+  level: ConsoleLevel
+  active: boolean
+  onToggle: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`rounded-sm px-2 py-0.5 font-mono text-xs ${LEVEL_CLASS[level]} ${
+        active ? 'bg-surface-elevated' : 'opacity-40'
+      }`}
+    >
+      {level}
+    </button>
+  )
 }
 
 // `console.warn`/`console.error` do React Native anexam a stack trace da
@@ -245,12 +281,17 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
   const { entries, clear } = useConsole(deviceId)
   const { entries: replEntries, history, run, clear: clearRepl } = useRepl(deviceId)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeLevels, setActiveLevels] = useState<Set<ConsoleLevel>>(new Set(ALL_LEVELS))
   const bottomRef = useRef<HTMLDivElement>(null)
+
   const rows = buildScrollback(entries, replEntries)
+  const query = searchQuery.trim().toLowerCase()
+  const visibleRows = rows.filter((row) => matchesFilters(row, query, activeLevels))
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [rows.length])
+  }, [visibleRows.length])
 
   if (!deviceId) {
     return (
@@ -269,10 +310,23 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
     })
   }
 
+  const toggleLevel = (level: ConsoleLevel): void => {
+    setActiveLevels((prev) => {
+      const next = new Set(prev)
+      if (next.has(level)) next.delete(level)
+      else next.add(level)
+      return next
+    })
+  }
+
   const clearAll = (): void => {
     clear()
     clearRepl()
   }
+
+  const visibleConsoleEntryIds = visibleRows
+    .filter((row) => row.kind === 'console')
+    .map((row) => row.entry.id)
 
   return (
     <div className="flex h-full flex-col">
@@ -283,7 +337,7 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
           <button
             type="button"
             title="Expandir tudo"
-            onClick={() => setExpandedIds(new Set(entries.map((entry) => entry.id)))}
+            onClick={() => setExpandedIds(new Set(visibleConsoleEntryIds))}
             className="text-foreground-muted hover:text-foreground"
           >
             <ChevronsDown size={14} />
@@ -296,7 +350,7 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
           >
             <ChevronsUp size={14} />
           </button>
-          <CopyButton title="Copiar tudo" getText={() => rows.map(rowToText).join('\n')} />
+          <CopyButton title="Copiar tudo" getText={() => visibleRows.map(rowToText).join('\n')} />
           <button
             type="button"
             title="Limpar console"
@@ -307,12 +361,38 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
           </button>
         </div>
       </div>
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-sm bg-surface-elevated px-2 py-1">
+          <Search size={14} className="shrink-0 text-foreground-muted" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar no console…"
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-foreground-muted"
+          />
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {ALL_LEVELS.map((level) => (
+            <LevelToggle
+              key={level}
+              level={level}
+              active={activeLevels.has(level)}
+              onToggle={() => toggleLevel(level)}
+            />
+          ))}
+        </div>
+      </div>
       <div className="flex-1 overflow-y-auto">
-        {rows.length === 0 ? (
-          <p className="p-4 text-sm text-foreground-muted">Nenhuma mensagem ainda</p>
+        {visibleRows.length === 0 ? (
+          <p className="p-4 text-sm text-foreground-muted">
+            {rows.length === 0
+              ? 'Nenhuma mensagem ainda'
+              : 'Nenhuma mensagem corresponde ao filtro'}
+          </p>
         ) : (
           <>
-            {rows.map((row) =>
+            {visibleRows.map((row) =>
               row.kind === 'console' ? (
                 <ConsoleRow
                   key={row.key}
