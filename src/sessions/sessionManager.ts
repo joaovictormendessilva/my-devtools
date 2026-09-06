@@ -68,20 +68,6 @@ function readEvaluateValue(
   return { ok: true, value: remoteObject ? remoteObject.value : undefined }
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-// O Metro serve o bundle com uma URL própria (host, porta, query string de
-// plataforma) que o usuário não digita — ele só sabe o nome/caminho do
-// arquivo (ex: "App.js"). `Debugger.setBreakpointByUrl` com `url` exige
-// igualdade EXATA com a URL do script carregado; usamos `urlRegex` casando só
-// o final do caminho (com query string opcional depois) pra não depender de
-// saber a URL completa.
-function urlRegexForFile(file: string): string {
-  return `${escapeRegExp(file)}(\\?.*)?$`
-}
-
 function extractScopeVariables(response: unknown): ScopeVariable[] {
   if (!isRecord(response) || !Array.isArray(response.result)) return []
   return response.result
@@ -163,10 +149,18 @@ export class SessionManager {
     const ensured = await this.ensureConnection(deviceId)
     if (!ensured.ok) return { ok: false, message: ensured.message }
 
+    // Hermes só implementa `Debugger.setBreakpointByUrl` com `url` EXATA — não
+    // suporta `urlRegex` ("URL required; regex unsupported"). Como o usuário só
+    // sabe o nome/caminho do arquivo (ex: "App.js"), não a URL completa que o
+    // Metro serve (host, porta, query string), resolvemos a URL real nós
+    // mesmos a partir dos `Debugger.scriptParsed` já vistos nesta conexão.
+    const resolved = this.resolveScriptUrl(deviceId, file)
+    if (!resolved.ok) return resolved
+
     try {
       const response = await ensured.connection.send({
         method: 'Debugger.setBreakpointByUrl',
-        params: { urlRegex: urlRegexForFile(file), lineNumber: Math.max(0, lineNumber - 1) }
+        params: { url: resolved.url, lineNumber: Math.max(0, lineNumber - 1) }
       })
       const breakpointId =
         isRecord(response) && typeof response.breakpointId === 'string'
@@ -174,25 +168,54 @@ export class SessionManager {
           : undefined
       if (!breakpointId) return { ok: false, message: 'CDP não devolveu um breakpointId' }
 
-      const breakpoint: Breakpoint = { id: breakpointId, file, lineNumber }
+      const breakpoint: Breakpoint = { id: breakpointId, file: resolved.url, lineNumber }
       this.updateDebuggerState(ensured.session, (state) => ({
         ...state,
         breakpoints: [...state.breakpoints, breakpoint]
       }))
 
+      // URL certa não garante que ESSA linha tem código executável (linha em
+      // branco, comentário, chave de fechamento) — CDP resolve pro breakable
+      // mais próximo e devolve isso em `locations`; vazio é sinal real de
+      // problema, mesmo com a URL correta.
       const locations =
         isRecord(response) && Array.isArray(response.locations) ? response.locations : []
       if (locations.length === 0) {
         return {
           ok: true,
-          warning:
-            'nenhum script carregado bate com esse arquivo ainda — o breakpoint pode nunca ser atingido'
+          warning: 'a linha não parece ter código executável — o breakpoint pode nunca ser atingido'
         }
       }
       return { ok: true }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) }
     }
+  }
+
+  // Acha, entre os scripts já carregados nesta sessão, o único cuja URL
+  // termina com `file`. Ambíguo (dois arquivos com o mesmo nome, ex: dois
+  // `index.js` de pastas diferentes) ou não encontrado (arquivo ainda não
+  // carregado) viram erro — não dá pra adivinhar qual o usuário quis dizer.
+  private resolveScriptUrl(
+    deviceId: string,
+    file: string
+  ): { ok: true; url: string } | { ok: false; message: string } {
+    const knownUrls = new Set(this.getScriptUrls(deviceId).values())
+    const matches = [...knownUrls].filter((url) => url.endsWith(file))
+
+    if (matches.length === 0) {
+      return {
+        ok: false,
+        message: `nenhum script carregado termina com "${file}" — confira o nome/caminho, ou abra a tela que carrega esse arquivo antes de setar o breakpoint`
+      }
+    }
+    if (matches.length > 1) {
+      return {
+        ok: false,
+        message: `mais de um script carregado termina com "${file}" (${matches.join(', ')}) — use um caminho mais específico, ex: "pasta/${file}"`
+      }
+    }
+    return { ok: true, url: matches[0] }
   }
 
   async removeBreakpoint(deviceId: string, breakpointId: string): Promise<DebuggerCommandResult> {
