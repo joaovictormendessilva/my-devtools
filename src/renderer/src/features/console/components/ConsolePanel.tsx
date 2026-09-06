@@ -2,11 +2,72 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronsDown, ChevronsUp, Copy, Trash2 } from 'lucide-react'
 import type { ConsoleEntry, ConsoleLevel } from '../../../../../protocol/console'
 import { useConsole } from '../hooks/useConsole'
+import { useRepl, type ReplEntry } from '../hooks/useRepl'
 
 const COPIED_FEEDBACK_MS = 1500
 
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+function formatReplValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && value !== null) {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
 function entryToText(entry: ConsoleEntry): string {
   return `${formatTime(entry.timestamp)}  ${entry.text}`
+}
+
+function replResultText(repl: ReplEntry): string {
+  if (repl.status === 'loading') return '…'
+  if (!repl.result) return ''
+  return repl.result.ok ? formatReplValue(repl.result.value) : repl.result.error
+}
+
+function replToText(repl: ReplEntry): string {
+  return `${formatTime(repl.timestamp)}  > ${repl.expression}\n${replResultText(repl)}`
+}
+
+// Intercala mensagens de console e comandos do REPL num único scrollback, na
+// ordem em que aconteceram — igual ao console do Chrome DevTools, onde o que
+// você digitou aparece junto com os logs do app, não numa área separada.
+type ScrollbackRow =
+  | { kind: 'console'; key: string; timestamp: number; entry: ConsoleEntry }
+  | { kind: 'repl'; key: string; timestamp: number; repl: ReplEntry }
+
+function buildScrollback(entries: ConsoleEntry[], replEntries: ReplEntry[]): ScrollbackRow[] {
+  const rows: ScrollbackRow[] = [
+    ...entries.map((entry) => ({
+      kind: 'console' as const,
+      key: `c-${entry.id}`,
+      timestamp: entry.timestamp,
+      entry
+    })),
+    ...replEntries.map((repl) => ({
+      kind: 'repl' as const,
+      key: `r-${repl.id}`,
+      timestamp: repl.timestamp,
+      repl
+    }))
+  ]
+  return rows.sort((a, b) => a.timestamp - b.timestamp)
+}
+
+function rowToText(row: ScrollbackRow): string {
+  return row.kind === 'console' ? entryToText(row.entry) : replToText(row.repl)
 }
 
 // Ícone de copiar com feedback visual (vira um check por um instante) — usado
@@ -44,15 +105,6 @@ const LEVEL_CLASS: Record<ConsoleLevel, string> = {
   debug: 'text-foreground-muted',
   warn: 'text-warning',
   error: 'text-error'
-}
-
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
 }
 
 // `console.warn`/`console.error` do React Native anexam a stack trace da
@@ -99,14 +151,106 @@ function ConsoleRow({
   )
 }
 
+function ReplRow({ repl }: { repl: ReplEntry }): React.JSX.Element {
+  return (
+    <div className="border-b border-border px-3 py-1.5 font-mono text-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 gap-3">
+          <span className="shrink-0 text-foreground-muted">{formatTime(repl.timestamp)}</span>
+          <span className="min-w-0 whitespace-pre-wrap break-all text-accent">
+            {'> '}
+            {repl.expression}
+          </span>
+        </div>
+        <div className="shrink-0">
+          <CopyButton title="Copiar comando" getText={() => replToText(repl)} />
+        </div>
+      </div>
+      <div className="ml-4 mt-1">
+        {repl.status === 'loading' ? (
+          <span className="text-foreground-muted">…</span>
+        ) : repl.result?.ok ? (
+          <span className="whitespace-pre-wrap break-all text-success">
+            {formatReplValue(repl.result.value)}
+          </span>
+        ) : (
+          <span className="whitespace-pre-wrap break-all text-error" title={repl.result?.message}>
+            {repl.result?.error}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Recall de comandos com as setas ↑/↓, igual ao console do Chrome DevTools.
+function ReplInput({
+  history,
+  onSubmit
+}: {
+  history: string[]
+  onSubmit: (expression: string) => void
+}): React.JSX.Element {
+  const [value, setValue] = useState('')
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null)
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Enter') {
+      const expression = value.trim()
+      if (!expression) return
+      onSubmit(expression)
+      setValue('')
+      setHistoryIndex(null)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (history.length === 0) return
+      const nextIndex = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1)
+      setHistoryIndex(nextIndex)
+      setValue(history[nextIndex])
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (historyIndex === null) return
+      const nextIndex = historyIndex + 1
+      if (nextIndex >= history.length) {
+        setHistoryIndex(null)
+        setValue('')
+      } else {
+        setHistoryIndex(nextIndex)
+        setValue(history[nextIndex])
+      }
+    }
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2">
+      <span className="font-mono text-xs text-accent">{'>'}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Avaliar expressão JavaScript…"
+        spellCheck={false}
+        className="flex-1 bg-transparent font-mono text-xs text-foreground outline-none placeholder:text-foreground-muted"
+      />
+    </div>
+  )
+}
+
 export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): React.JSX.Element {
   const { entries, clear } = useConsole(deviceId)
+  const { entries: replEntries, history, run, clear: clearRepl } = useRepl(deviceId)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
+  const rows = buildScrollback(entries, replEntries)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [entries.length])
+  }, [rows.length])
 
   if (!deviceId) {
     return (
@@ -123,6 +267,11 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
       else next.delete(id)
       return next
     })
+  }
+
+  const clearAll = (): void => {
+    clear()
+    clearRepl()
   }
 
   return (
@@ -147,11 +296,11 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
           >
             <ChevronsUp size={14} />
           </button>
-          <CopyButton title="Copiar tudo" getText={() => entries.map(entryToText).join('\n')} />
+          <CopyButton title="Copiar tudo" getText={() => rows.map(rowToText).join('\n')} />
           <button
             type="button"
             title="Limpar console"
-            onClick={clear}
+            onClick={clearAll}
             className="text-foreground-muted hover:text-foreground"
           >
             <Trash2 size={14} />
@@ -159,22 +308,27 @@ export function ConsolePanel({ deviceId }: { deviceId: string | undefined }): Re
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
+        {rows.length === 0 ? (
           <p className="p-4 text-sm text-foreground-muted">Nenhuma mensagem ainda</p>
         ) : (
           <>
-            {entries.map((entry) => (
-              <ConsoleRow
-                key={entry.id}
-                entry={entry}
-                expanded={expandedIds.has(entry.id)}
-                onToggle={(open) => toggleEntry(entry.id, open)}
-              />
-            ))}
+            {rows.map((row) =>
+              row.kind === 'console' ? (
+                <ConsoleRow
+                  key={row.key}
+                  entry={row.entry}
+                  expanded={expandedIds.has(row.entry.id)}
+                  onToggle={(open) => toggleEntry(row.entry.id, open)}
+                />
+              ) : (
+                <ReplRow key={row.key} repl={row.repl} />
+              )
+            )}
             <div ref={bottomRef} />
           </>
         )}
       </div>
+      <ReplInput history={history} onSubmit={run} />
     </div>
   )
 }

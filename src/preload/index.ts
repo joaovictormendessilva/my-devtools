@@ -12,7 +12,7 @@ import type { ConsoleEntry } from '../protocol/console'
 // no renderer.
 const api = {
   listDevices: (): Promise<Device[]> => ipcRenderer.invoke('devices:list'),
-  // Temporário do M1: roda uma expressão via CDP no device e devolve o resultado.
+  // Roda uma expressão JavaScript via CDP no device (REPL do painel Console).
   evaluate: (deviceId: string, expression: string): Promise<EvaluateResult> =>
     ipcRenderer.invoke('devices:evaluate', deviceId, expression),
   getConsoleEntries: (deviceId: string): Promise<ConsoleEntry[]> =>

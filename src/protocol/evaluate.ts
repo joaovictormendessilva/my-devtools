@@ -1,7 +1,6 @@
 // Contrato do canal IPC `devices:evaluate` (renderer → main → CDPConnection).
-// Temporário do M1: existe só para provar o transporte CDP ponta-a-ponta
-// (rodar `2 + 2` num device e ver `4` na UI). Será substituído pelo painel
-// Console / REPL no M2.
+// Usado pelo REPL do painel Console (M2): roda uma expressão JavaScript no
+// device selecionado via `Runtime.evaluate` e devolve o resultado.
 
 export type EvaluateError =
   | 'no-device'

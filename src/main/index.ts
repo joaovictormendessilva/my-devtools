@@ -73,8 +73,8 @@ app.whenReady().then(() => {
   // Descoberta de dispositivos: o renderer pede a lista via preload (window.api),
   // o DeviceManager faz o polling real do Metro em segundo plano.
   ipcMain.handle('devices:list', () => deviceManager.list())
-  // Temporário do M1: prova o transporte CDP ponta-a-ponta (rodar `2 + 2` num
-  // device e ver `4` na UI). Nunca lança para o renderer — sempre um EvaluateResult.
+  // REPL do painel Console: roda a expressão via CDP no device selecionado.
+  // Nunca lança para o renderer — sempre um EvaluateResult.
   ipcMain.handle('devices:evaluate', (_event, deviceId: string, expression: string) =>
     sessionManager.evaluate(deviceId, expression)
   )
