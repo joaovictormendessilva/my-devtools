@@ -7,14 +7,14 @@ explícita do usuário (ver `CLAUDE.md`, regras de escopo).
 
 ## Status atual
 
-**M1 concluído.** Próximo: M2.
+**M2 concluído.** Próximo: M3.
 
 | Milestone           | Status          |
 | ------------------- | --------------- |
 | M0 — Fundação       | ✅ Concluído    |
 | M1 — Connectivity   | ✅ Concluído    |
-| M2 — Core Debugging | 🔜 Próximo      |
-| M3 — Network        | ⬜ Não iniciado |
+| M2 — Core Debugging | ✅ Concluído    |
+| M3 — Network        | 🔜 Próximo      |
 | M4 — App Inspection | ⬜ Não iniciado |
 | M5 — Performance    | ⬜ Não iniciado |
 | M6 — Extensibility  | ⬜ Não iniciado |
@@ -93,18 +93,27 @@ compatibilidade formal por versão de SDK é trabalho do M7, não deste mileston
 
 ---
 
-## M2 — Core Debugging ⬜
+## M2 — Core Debugging ✅
 
 **Objetivo:** primeiro painel real e útil no dia a dia.
 
 **Entregáveis:**
 
 - Painel Console: logs, warnings, errors, exceptions, stack trace, filtros, busca
-- JavaScript REPL (`>` com histórico de comandos)
+- JavaScript REPL (`>` com histórico de comandos), intercalado com o console
+  (mesmo scrollback, ordenado por timestamp — igual ao Chrome DevTools)
 - Debugger básico sobre CDP: breakpoints, step over/into/out, call stack, scopes
+  — vive num painel próprio (aba "Debugger"), com `stores.debugger` na
+  `DeviceSession` (estado ao vivo, não um histórico — ver `ARCHITECTURE.md` §1)
+
+**Simplificação deliberada:** não existe visualizador de código-fonte nesta
+fatia (não está no roadmap de nenhum milestone) — o breakpoint é setado
+indicando arquivo + linha manualmente (`Debugger.setBreakpointByUrl`), olhando
+o código no editor. Inspeção de escopo cobre só o frame onde parou (topo da
+pilha), não cada frame — sem consumidor real pra isso ainda (YAGNI).
 
 **Critério de pronto:** `console.log("hello")` do app aparece no painel; é possível
-pausar em um breakpoint e inspecionar variáveis.
+pausar em um breakpoint e inspecionar variáveis. ✅
 
 ---
 

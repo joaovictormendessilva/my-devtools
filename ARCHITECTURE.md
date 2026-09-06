@@ -21,8 +21,11 @@ Panels
 - **Device** — representa um dispositivo físico ou emulado (iPhone, Pixel, simulador
   iOS, emulador Android) descoberto pelo `DeviceManager`.
 - **DeviceSession** — uma sessão isolada por dispositivo. Contém suas próprias
-  `stores` (console, network, navigation, storage, performance) e suas próprias
-  `connections`. Duas sessões nunca compartilham estado.
+  `stores` (console, debugger, network, navigation, storage, performance) e suas
+  próprias `connections`. Duas sessões nunca compartilham estado. A maioria dos
+  `stores` é um histórico que só cresce (console, network); `debugger` é
+  diferente — é estado AO VIVO da execução (pausado ou não, pilha de chamadas,
+  breakpoints), substituído a cada evento, não uma lista que acumula.
 - **Connections** — abstração de transporte (CDP/Hermes, Expo DevTools Protocol,
   WebSocket genérico). Cada `DeviceSession` tem 0 ou mais conexões ativas.
 - **Capabilities** — o que uma sessão suporta, derivado da versão do Expo SDK / RN /
@@ -153,6 +156,7 @@ interface DeviceSession {
   }
   stores: {
     console: ConsoleStore
+    debugger: DebuggerStore
     network: NetworkStore
     navigation: NavigationStore
     storage: StorageStore

@@ -1,4 +1,5 @@
 import type { StackFrame } from './consoleEvents'
+import { isRecord } from './remoteObject'
 
 // Metro expõe `POST /symbolicate`: manda um stack cru (posição no bundle) e
 // devolve o mesmo stack traduzido pro arquivo/linha reais do código-fonte, via
@@ -11,38 +12,40 @@ import type { StackFrame } from './consoleEvents'
 const METRO_SYMBOLICATE_URL = 'http://localhost:8081/symbolicate'
 const REQUEST_TIMEOUT_MS = 3000
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+export interface SymbolicatedFrame {
+  functionName: string
+  file: string
+  lineNumber: number
+  columnNumber: number
 }
 
-function formatRawFrame(frame: StackFrame): string {
-  return `    at ${frame.functionName} (${frame.url}:${frame.lineNumber}:${frame.columnNumber})`
+function toRawFrame(frame: StackFrame): SymbolicatedFrame {
+  return {
+    functionName: frame.functionName,
+    file: frame.url,
+    lineNumber: frame.lineNumber,
+    columnNumber: frame.columnNumber
+  }
 }
 
-// Formata um frame já symbolicado de volta pro mesmo estilo "at nome (arquivo:linha:coluna)".
-// `collapse` do Metro marca frame "menos relevante" (ex: glue interno de
-// evento) — mostramos mesmo assim, só descartando o que o Metro não conseguiu
-// mapear pra arquivo nenhum (nesse caso não sobra nada útil pra exibir).
-function formatSymbolicatedFrame(frame: unknown): string | undefined {
-  if (!isRecord(frame)) return undefined
-  const file = typeof frame.file === 'string' ? frame.file : undefined
-  if (!file) return undefined
-  const methodName = typeof frame.methodName === 'string' ? frame.methodName : '<anonymous>'
-  const line = typeof frame.lineNumber === 'number' ? frame.lineNumber : '?'
-  const column = typeof frame.column === 'number' ? frame.column : '?'
-  return `    at ${methodName} (${file}:${line}:${column})`
+function formatFrame(frame: SymbolicatedFrame): string {
+  return `    at ${frame.functionName} (${frame.file}:${frame.lineNumber}:${frame.columnNumber})`
 }
 
 /**
- * Traduz um call stack estruturado do CDP pra arquivo/linha reais via Metro.
+ * Traduz um call stack estruturado do CDP pra arquivo/linha reais via Metro,
+ * preservando ordem e quantidade — uma saída pra cada frame de entrada, na
+ * mesma posição. `collapse` do Metro marca frame "menos relevante" (ex: glue
+ * interno de evento) — mostramos mesmo assim; só cai pro frame cru (posição no
+ * bundle, não symbolicado) na posição em que o Metro não conseguiu mapear
+ * nenhum arquivo, em vez de descartar a entrada e desalinhar o restante.
  * Falha silenciosa: qualquer problema (Metro fora do ar, formato inesperado)
- * devolve o stack cru formatado (posição no bundle, não no código-fonte) em
- * vez de nada — symbolication é só uma melhoria de leitura, nunca deve
+ * devolve tudo cru — symbolication é só uma melhoria de leitura, nunca deve
  * impedir a entrada de aparecer no painel.
  */
-export async function symbolicateFrames(frames: StackFrame[]): Promise<string> {
-  if (frames.length === 0) return ''
-  const rawFormatted = frames.map(formatRawFrame).join('\n')
+export async function symbolicateStructured(frames: StackFrame[]): Promise<SymbolicatedFrame[]> {
+  if (frames.length === 0) return []
+  const raw = frames.map(toRawFrame)
 
   try {
     const response = await fetch(METRO_SYMBOLICATE_URL, {
@@ -58,15 +61,29 @@ export async function symbolicateFrames(frames: StackFrame[]): Promise<string> {
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     })
-    if (!response.ok) return rawFormatted
+    if (!response.ok) return raw
 
     const body: unknown = await response.json()
     const symbolicated = isRecord(body) && Array.isArray(body.stack) ? body.stack : undefined
-    if (!symbolicated) return rawFormatted
+    if (!symbolicated) return raw
 
-    const formatted = symbolicated.map(formatSymbolicatedFrame).filter((line) => line !== undefined)
-    return formatted.length > 0 ? formatted.join('\n') : rawFormatted
+    return raw.map((fallback, index) => {
+      const frame: unknown = symbolicated[index]
+      if (!isRecord(frame) || typeof frame.file !== 'string') return fallback
+      return {
+        functionName:
+          typeof frame.methodName === 'string' ? frame.methodName : fallback.functionName,
+        file: frame.file,
+        lineNumber: typeof frame.lineNumber === 'number' ? frame.lineNumber : fallback.lineNumber,
+        columnNumber: typeof frame.column === 'number' ? frame.column : fallback.columnNumber
+      }
+    })
   } catch {
-    return rawFormatted
+    return raw
   }
+}
+
+export async function symbolicateFrames(frames: StackFrame[]): Promise<string> {
+  const structured = await symbolicateStructured(frames)
+  return structured.map(formatFrame).join('\n')
 }

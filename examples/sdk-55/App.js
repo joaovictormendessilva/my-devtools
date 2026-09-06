@@ -14,6 +14,9 @@ function HomeScreen({ onSelect }) {
       <Pressable style={styles.button} onPress={() => onSelect('console')}>
         <Text style={styles.buttonText}>Console (log / warn / error / exceção)</Text>
       </Pressable>
+      <Pressable style={styles.button} onPress={() => onSelect('debugger')}>
+        <Text style={styles.buttonText}>Debugger (breakpoint / step / escopo)</Text>
+      </Pressable>
     </View>
   );
 }
@@ -62,6 +65,39 @@ function ConsoleScreen({ onBack }) {
   );
 }
 
+// Função de teste do painel Debugger: ponha um breakpoint na linha do
+// `const doubled` (linha 73 deste arquivo) antes de apertar o botão — o
+// debugger deve pausar ali com `a`, `b`, `sum` visíveis no escopo local.
+function computeSomething(a, b) {
+  const sum = a + b;
+  const doubled = sum * 2;
+  const label = `resultado: ${doubled}`;
+  console.log(label);
+  return doubled;
+}
+
+function DebuggerScreen({ onBack }) {
+  const [result, setResult] = useState(null);
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Teste: Debugger</Text>
+      <Text style={styles.hint}>
+        Ponha um breakpoint em App.js, linha do "const doubled" (linha 73) antes de
+        clicar.
+      </Text>
+
+      <Pressable style={styles.button} onPress={() => setResult(computeSomething(2, 3))}>
+        <Text style={styles.buttonText}>Rodar função com variáveis locais</Text>
+      </Pressable>
+
+      {result !== null && <Text style={styles.hint}>Resultado: {result}</Text>}
+
+      <BackButton onPress={onBack} />
+    </View>
+  );
+}
+
 export default function App() {
   const [screen, setScreen] = useState('home');
 
@@ -69,6 +105,7 @@ export default function App() {
     <ScrollView contentContainerStyle={styles.scroll}>
       {screen === 'home' && <HomeScreen onSelect={setScreen} />}
       {screen === 'console' && <ConsoleScreen onBack={() => setScreen('home')} />}
+      {screen === 'debugger' && <DebuggerScreen onBack={() => setScreen('home')} />}
       <StatusBar style="auto" />
     </ScrollView>
   );
@@ -90,6 +127,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 16,
     fontWeight: '600',
+  },
+  hint: {
+    maxWidth: 260,
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#52525b',
   },
   button: {
     paddingVertical: 10,

@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ConsoleEntry, ConsoleLevel } from '../protocol/console'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
+import { formatRemoteObject, isRecord } from './remoteObject'
 
 // CDP usa "warning"; nosso ConsoleLevel usa "warn" (nome mais comum do console.* da web).
 function levelFromCdpType(type: unknown): ConsoleLevel {
@@ -12,17 +9,6 @@ function levelFromCdpType(type: unknown): ConsoleLevel {
   if (type === 'info') return 'info'
   if (type === 'debug') return 'debug'
   return 'log'
-}
-
-// RemoteObject do CDP: primitivos vêm em `.value`, objetos/funções em `.description`.
-// Pra um Error, `.description` traz a mensagem seguida da stack como texto — só
-// a primeira linha (nome + mensagem) interessa aqui; a stack de verdade vem
-// estruturada em `stackTrace.callFrames` (ver `extractCallFrames`), não daqui.
-function formatRemoteObject(value: unknown): string {
-  if (!isRecord(value)) return String(value)
-  if ('value' in value) return String(value.value)
-  if (typeof value.description === 'string') return value.description.split('\n')[0]
-  return typeof value.type === 'string' ? value.type : 'object'
 }
 
 export interface StackFrame {

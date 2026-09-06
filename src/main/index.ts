@@ -14,6 +14,10 @@ sessionManager.onConsoleEntry((deviceId, entry) => {
   mainWindow?.webContents.send('console:message', deviceId, entry)
 })
 
+sessionManager.onDebuggerState((deviceId, state) => {
+  mainWindow?.webContents.send('debugger:update', deviceId, state)
+})
+
 function createWindow(): void {
   const browserWindow = new BrowserWindow({
     width: 1280,
@@ -82,6 +86,32 @@ app.whenReady().then(() => {
   // capturado. Eventos novos chegam depois via `console:message` (ver acima).
   ipcMain.handle('devices:consoleEntries', (_event, deviceId: string) =>
     sessionManager.consoleEntries(deviceId)
+  )
+  // Painel Debugger: mesma lógica do Console (estado inicial via invoke,
+  // atualizações ao vivo via `debugger:update`). Comandos nunca lançam pro
+  // renderer — sempre um DebuggerCommandResult.
+  ipcMain.handle('devices:debuggerState', (_event, deviceId: string) =>
+    sessionManager.debuggerState(deviceId)
+  )
+  ipcMain.handle(
+    'devices:setBreakpoint',
+    (_event, deviceId: string, file: string, lineNumber: number) =>
+      sessionManager.setBreakpoint(deviceId, file, lineNumber)
+  )
+  ipcMain.handle('devices:removeBreakpoint', (_event, deviceId: string, breakpointId: string) =>
+    sessionManager.removeBreakpoint(deviceId, breakpointId)
+  )
+  ipcMain.handle('devices:debuggerResume', (_event, deviceId: string) =>
+    sessionManager.resume(deviceId)
+  )
+  ipcMain.handle('devices:debuggerStepOver', (_event, deviceId: string) =>
+    sessionManager.stepOver(deviceId)
+  )
+  ipcMain.handle('devices:debuggerStepInto', (_event, deviceId: string) =>
+    sessionManager.stepInto(deviceId)
+  )
+  ipcMain.handle('devices:debuggerStepOut', (_event, deviceId: string) =>
+    sessionManager.stepOut(deviceId)
   )
   deviceManager.start()
 
