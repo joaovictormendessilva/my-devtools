@@ -1,40 +1,12 @@
 import { useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, Play, X } from 'lucide-react'
+import { Section } from '../../../shared/components/ui/Section'
 import { useDebugger } from '../hooks/useDebugger'
 
 const STEP_BUTTON_CLASS =
   'text-foreground-muted hover:text-foreground disabled:opacity-40 disabled:hover:text-foreground-muted'
 
 const KNOWN_SOURCE_FILES_DATALIST_ID = 'debugger-known-source-files'
-
-// Seção colapsável — controlado (não só `defaultOpen`) porque o painel
-// re-renderiza a cada `debugger:update` (todo step/pause/resume); com um
-// `open` não-controlado o React reaplicaria o valor inicial a cada render e
-// desfaria qualquer collapse manual do usuário.
-function Section({
-  title,
-  open,
-  onToggle,
-  children
-}: {
-  title: string
-  open: boolean
-  onToggle: (open: boolean) => void
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <details
-      className="border-b border-border px-4 py-2"
-      open={open}
-      onToggle={(event) => onToggle(event.currentTarget.open)}
-    >
-      <summary className="cursor-pointer text-xs font-medium text-foreground-secondary">
-        {title}
-      </summary>
-      <div className="mt-1">{children}</div>
-    </details>
-  )
-}
 
 // Sem visualizador de código-fonte ainda (não está no roadmap desta fatia) —
 // o breakpoint é setado indicando arquivo + linha manualmente, olhando o

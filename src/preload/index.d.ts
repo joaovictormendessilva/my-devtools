@@ -3,6 +3,7 @@ import type { Device } from '../protocol/device'
 import type { EvaluateResult } from '../protocol/evaluate'
 import type { ConsoleEntry } from '../protocol/console'
 import type { DebuggerCommandResult, DebuggerState } from '../protocol/debugger'
+import type { NetworkRequest } from '../protocol/network'
 
 declare global {
   interface Window {
@@ -25,6 +26,8 @@ declare global {
       debuggerStepInto: (deviceId: string) => Promise<DebuggerCommandResult>
       debuggerStepOut: (deviceId: string) => Promise<DebuggerCommandResult>
       onDebuggerUpdate: (callback: (deviceId: string, state: DebuggerState) => void) => () => void
+      getNetworkRequests: (deviceId: string) => Promise<NetworkRequest[]>
+      onNetworkUpdate: (callback: (deviceId: string, request: NetworkRequest) => void) => () => void
     }
   }
 }

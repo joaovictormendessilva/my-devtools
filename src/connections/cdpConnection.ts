@@ -12,6 +12,18 @@ import type { CloseHandler, Connection, MessageHandler, Unsubscribe } from '../p
 const DEFAULT_CONNECT_TIMEOUT_MS = 5000
 const DEFAULT_REQUEST_TIMEOUT_MS = 5000
 
+// Quando o app do outro lado morre sem fechar o WebSocket direito (processo
+// morto/app fechado à mão, sem handshake de close) — comum em device físico —
+// o SO só percebe a conexão morta depois de um timeout de TCP bem mais longo
+// que qualquer coisa razoável pra uma ferramenta interativa (dezenas de
+// segundos, na prática observado). Só esperar isso deixa `readyState` mentindo
+// "OPEN" pro resto do sistema (inclusive pro botão de reconectar manual, que
+// aí não faz nada — a conexão "parece" viva). Ping/pong do próprio protocolo
+// WebSocket detecta isso bem mais rápido: se não vier pong a tempo, a conexão
+// é tratada como morta e fechada de propósito, disparando o fluxo normal de
+// `close` (ver `SessionManager.handleConnectionClosed`).
+const HEARTBEAT_INTERVAL_MS = 5000
+
 export type CdpErrorCode =
   'connect-failed' | 'connect-timeout' | 'request-timeout' | 'request-failed' | 'connection-closed'
 
@@ -110,6 +122,7 @@ export class CDPConnection implements Connection {
       const ws = new WebSocket(this.url, this.origin ? { origin: this.origin } : undefined)
       this.ws = ws
       let settled = false
+      let isAlive = true
 
       const timer = setTimeout(() => {
         if (settled) return
@@ -123,11 +136,27 @@ export class CDPConnection implements Connection {
         )
       }, this.connectTimeoutMs)
 
+      // Ver comentário de `HEARTBEAT_INTERVAL_MS`. Só liga depois do 'open'
+      // (não faz sentido fazer ping antes de conectar) e some no 'close'.
+      let heartbeat: ReturnType<typeof setInterval> | undefined
+
       ws.on('open', () => {
         if (settled) return
         settled = true
         clearTimeout(timer)
+        heartbeat = setInterval(() => {
+          if (!isAlive) {
+            ws.terminate() // sem pong a tempo: força o close em vez de esperar o TCP
+            return
+          }
+          isAlive = false
+          ws.ping()
+        }, HEARTBEAT_INTERVAL_MS)
         resolve()
+      })
+
+      ws.on('pong', () => {
+        isAlive = true
       })
 
       ws.on('error', (err: Error) => {
@@ -142,9 +171,10 @@ export class CDPConnection implements Connection {
       })
 
       ws.on('message', (data: RawData) => this.handleMessage(data))
-      ws.on('close', (code: number, reason: Buffer) =>
+      ws.on('close', (code: number, reason: Buffer) => {
+        if (heartbeat) clearInterval(heartbeat)
         this.handleClose(code, reason.toString('utf8'))
-      )
+      })
     }).finally(() => {
       this.connectingPromise = undefined
     })

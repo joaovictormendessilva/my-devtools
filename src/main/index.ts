@@ -18,6 +18,10 @@ sessionManager.onDebuggerState((deviceId, state) => {
   mainWindow?.webContents.send('debugger:update', deviceId, state)
 })
 
+sessionManager.onNetworkRequest((deviceId, request) => {
+  mainWindow?.webContents.send('network:update', deviceId, request)
+})
+
 function createWindow(): void {
   const browserWindow = new BrowserWindow({
     width: 1280,
@@ -117,6 +121,12 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('devices:debuggerStepOut', (_event, deviceId: string) =>
     sessionManager.stepOut(deviceId)
+  )
+  // Painel Network: garante a conexão (instala o interceptor de fetch/XHR se
+  // for nova) e devolve o que já foi capturado. Eventos novos chegam depois
+  // via `network:update` (ver acima).
+  ipcMain.handle('devices:networkRequests', (_event, deviceId: string) =>
+    sessionManager.networkRequests(deviceId)
   )
   deviceManager.start()
 

@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useDevices } from './shared/useDevices'
 import { ConsolePanel } from './features/console/components/ConsolePanel'
 import { DebuggerPanel } from './features/debugger/components/DebuggerPanel'
+import { NetworkPanel } from './features/network/components/NetworkPanel'
 
-type PanelId = 'console' | 'debugger'
+type PanelId = 'console' | 'debugger' | 'network'
 
 const PANELS: { id: PanelId; label: string }[] = [
   { id: 'console', label: 'Console' },
-  { id: 'debugger', label: 'Debugger' }
+  { id: 'debugger', label: 'Debugger' },
+  { id: 'network', label: 'Network' }
 ]
 
 function App(): React.JSX.Element {
@@ -69,6 +71,9 @@ function App(): React.JSX.Element {
           </div>
           <div className={activePanel === 'debugger' ? 'h-full' : 'hidden'}>
             <DebuggerPanel key={selectedDeviceId} deviceId={selectedDeviceId} />
+          </div>
+          <div className={activePanel === 'network' ? 'h-full' : 'hidden'}>
+            <NetworkPanel key={selectedDeviceId} deviceId={selectedDeviceId} />
           </div>
         </div>
       </main>

@@ -4,6 +4,7 @@ import type { Device } from '../protocol/device'
 import type { EvaluateResult } from '../protocol/evaluate'
 import type { ConsoleEntry } from '../protocol/console'
 import type { DebuggerCommandResult, DebuggerState } from '../protocol/debugger'
+import type { NetworkRequest } from '../protocol/network'
 
 // O preload é a ÚNICA ponte entre o processo main e o renderer. O renderer roda
 // sem acesso a Node (contextIsolation ligado, nodeIntegration desligado — ver
@@ -55,6 +56,19 @@ const api = {
     ): void => callback(deviceId, state)
     ipcRenderer.on('debugger:update', listener)
     return () => ipcRenderer.removeListener('debugger:update', listener)
+  },
+  getNetworkRequests: (deviceId: string): Promise<NetworkRequest[]> =>
+    ipcRenderer.invoke('devices:networkRequests', deviceId),
+  onNetworkUpdate: (
+    callback: (deviceId: string, request: NetworkRequest) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      deviceId: string,
+      request: NetworkRequest
+    ): void => callback(deviceId, request)
+    ipcRenderer.on('network:update', listener)
+    return () => ipcRenderer.removeListener('network:update', listener)
   }
 }
 
