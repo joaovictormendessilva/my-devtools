@@ -7,15 +7,15 @@ explícita do usuário (ver `CLAUDE.md`, regras de escopo).
 
 ## Status atual
 
-**M2 concluído.** Próximo: M3.
+**M3 concluído.** Próximo: M4.
 
 | Milestone           | Status          |
 | ------------------- | --------------- |
 | M0 — Fundação       | ✅ Concluído    |
 | M1 — Connectivity   | ✅ Concluído    |
 | M2 — Core Debugging | ✅ Concluído    |
-| M3 — Network        | 🔜 Próximo      |
-| M4 — App Inspection | ⬜ Não iniciado |
+| M3 — Network        | ✅ Concluído    |
+| M4 — App Inspection | 🔜 Próximo      |
 | M5 — Performance    | ⬜ Não iniciado |
 | M6 — Extensibility  | ⬜ Não iniciado |
 | M7 — Productization | ⬜ Não iniciado |
@@ -117,7 +117,7 @@ pausar em um breakpoint e inspecionar variáveis. ✅
 
 ---
 
-## M3 — Network ⬜
+## M3 — Network ✅
 
 **Objetivo:** visibilidade completa de tráfego de rede do app.
 
@@ -130,8 +130,15 @@ pausar em um breakpoint e inspecionar variáveis. ✅
 - Mascaramento de dados sensíveis (Authorization, cookies, tokens) antes de
   qualquer replay/export (ver regras de segurança no `CLAUDE.md`)
 
+**Limitação conhecida:** só fetch/XHR (chamadas JS) são capturadas. Native/`<Image>`
+não passam pelo interceptor injetado (`Runtime.evaluate` no fetch/XMLHttpRequest do
+JS) — captura-los exigiria o domínio CDP `Network` nativo, que não tem suporte
+confirmado em todas as versões de Hermes/RN que o projeto precisa cobrir (ver
+`src/sessions/networkInterceptorScript.ts`). Revisitar se um consumidor real precisar
+disso.
+
 **Critério de pronto:** uma requisição `POST /checkout` pode ser inspecionada,
-editada e reenviada; nenhum secret aparece em texto puro por padrão.
+editada e reenviada; nenhum secret aparece em texto puro por padrão. ✅
 
 ---
 
